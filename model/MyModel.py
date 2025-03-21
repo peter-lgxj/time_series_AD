@@ -24,15 +24,15 @@ class TFUnit(nn.Module):
 
 class MyModel(nn.Module):
     def __init__(self, feature_counts, continous_features, categorial_features,embedding_size,num_df,
-                 batch_size,seq_length,hidden_dim, num_patches, depth, heads, mlp_dim, dim_head, dropout):
+                 batch_size,seq_length,hidden_dim,depth, heads, mlp_dim, dim_head, dropout):
         super().__init__()
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.dfemb = DeepFMEmbedding(feature_counts, continous_features, categorial_features,embedding_size)
         self.deepfm = nn.ModuleList([DeepFM(feature_counts,batch_size*seq_length) for _ in range(num_df)])
         # self.deepfm=DeepFM(feature_counts,batch_size*seq_length)
-        self.vit_unit = TFUnit(hidden_dim, num_patches, depth, heads, mlp_dim, dim_head, dropout)
-        self.fc = nn.Linear(hidden_dim, 1)
+        self.vit_unit = TFUnit(hidden_dim, seq_length, depth, heads, mlp_dim, dim_head, dropout)
+        self.fc = nn.Linear((hidden_dim+num_df), len(feature_counts))
         
     def forward(self, xi,xv):
         fm_first_order, fm_second_order_emb_arr = self.dfemb(xi,xv)
@@ -44,12 +44,12 @@ class MyModel(nn.Module):
         df_out=[]
         for df in self.deepfm:
             df_out.append(df(fm_first_order, fm_second_order_emb_arr))
-        df_out=torch.stack(df_out,dim=1)
-        
+        df_out=torch.stack(df_out,dim=1).view(self.batch_size, self.seq_length,-1)
         
         ts_out = self.vit_unit(fm_first_order)
-        # ts_out = self.fc(ts_out).squeeze(-1)
-        return df_out, ts_out
+        out=torch.cat([df_out,ts_out],dim=-1)
+        out = self.fc(out)
+        return out
 
 
 

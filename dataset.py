@@ -24,7 +24,7 @@ class CriteoDataset(Dataset):
         data_window = self.data[actual_idx:actual_idx + self.window_size, :]
         # target = self.data[actual_idx + self.window_size - 1, -1]
         
-        Xi = torch.from_numpy(data_window.astype(np.float16)).unsqueeze(-1)
+        Xi = torch.from_numpy(data_window.astype(np.float32)).unsqueeze(-1)
         Xv = torch.from_numpy(np.ones_like(data_window))
         return Xi, Xv
 

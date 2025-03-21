@@ -21,7 +21,7 @@ class CriteoDataset(Dataset):
         if actual_idx + self.window_size > len(self.data):
             raise IndexError('Index out of range for sliding window')
         
-        data_window = self.data[actual_idx:actual_idx + self.window_size, :-1]
+        data_window = self.data[actual_idx:actual_idx + self.window_size, :]
         # target = self.data[actual_idx + self.window_size - 1, -1]
         
         Xi = torch.from_numpy(data_window.astype(np.float16)).unsqueeze(-1)

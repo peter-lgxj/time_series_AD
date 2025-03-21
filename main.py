@@ -61,8 +61,8 @@ class EXP_AD(object):
         # self.test()
         
     def train(self):
-        self.model.train()
         for epoch in range(self.config.epochs):
+            self.model.train()
             print("Epoch: ", epoch)
             epoch_loss = 0.0
             for i, (Xi, Xv) in enumerate(self.train_loader):
@@ -76,9 +76,10 @@ class EXP_AD(object):
                 epoch_loss += loss.item()
                 if i % 100 == 0:
                     print(f"Batch {i}, Loss: {loss.item()}")
-                print(f"Epoch {epoch}, Total Loss: {epoch_loss}")  # 打印当前epoch的总loss
-                torch.save(self.model.state_dict(), os.path.join(str(self.model_save_path), str(self.dataset) + self.id +'_checkpoint.pth'))
-                
+            print(f"Epoch {epoch}, Total Loss: {epoch_loss}")  # 打印当前epoch的总loss
+            torch.save(self.model.state_dict(), os.path.join(str(self.model_save_path), str(self.dataset) + self.id +'_checkpoint.pth'))
+            self.test()
+            self.model.train()
 
     def test(self):
         self.model.load_state_dict(

@@ -59,10 +59,10 @@ def preprocess(datadir, id,continous_features,categorial_features,batch_size,seq
     print("Feature counts:", feature_counts)
 
     train_dataset=CriteoDataset(data=train_data, window_size=seq_length, step_size=step_size, train=True)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=5)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=5,drop_last=True)
     
     test_dataset=CriteoDataset(data=test_data, window_size=seq_length, step_size=step_size, train=False)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=5)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=5,drop_last=True)
     
     return train_loader,test_loader,feature_counts,continous_features,categorial_features
     

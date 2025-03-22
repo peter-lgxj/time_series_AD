@@ -9,7 +9,7 @@ import numpy as np
 import os
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.metrics import accuracy_score
-import tqdm
+from tqdm import tqdm
 import pandas as pd
 
 
@@ -19,6 +19,7 @@ class EXP_AD(object):
         self.id = id
         self.config = config
         self.datapath = datapath
+        self.labelpath= config.labelpath
         self.batch_size = config.batch_size
         self.seq_length = config.seq_length
         self.step_size = config.step_size
@@ -31,6 +32,8 @@ class EXP_AD(object):
         self.mlp_dim = config.mlp_dim
         self.dim_head = config.dim_head
         self.dropout = config.dropout
+        
+        self.pa= config.pa
         
         self.model_save_path= config.model_save_path
         self.dataset = config.dataset
@@ -50,6 +53,8 @@ class EXP_AD(object):
                              mlp_dim=self.mlp_dim, 
                              dim_head=self.dim_head, 
                              dropout=self.dropout)
+        
+        self.test_labels=self.make_labels('MSL',self.id, self.labelpath)
         
         self.loss = nn.MSELoss()
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
@@ -74,7 +79,7 @@ class EXP_AD(object):
                 loss.backward()
                 self.optimizer.step()
                 epoch_loss += loss.item()
-                if i % 100 == 0:
+                if i % 10 == 0:
                     print(f"Batch {i}, Loss: {loss.item()}")
             print(f"Epoch {epoch}, Total Loss: {epoch_loss}")  # 打印当前epoch的总loss
             torch.save(self.model.state_dict(), os.path.join(str(self.model_save_path), str(self.dataset) + self.id +'_checkpoint.pth'))
@@ -86,49 +91,49 @@ class EXP_AD(object):
             torch.load(
                 os.path.join(str(self.model_save_path), str(self.dataset) + self.id+ '_checkpoint.pth')))
         self.model.eval()
-        temperature = 50
-        self.standard=torch.eye(self.win_size).to(self.device)
+        # temperature = 50
+        # self.standard=torch.eye(self.win_size).to(self.device)
         print("======================TEST MODE======================")
 
         self.evaluation=nn.MSELoss(reduction='mean')
         # (3) evaluation on the test set
-        test_labels = []
+        # test_labels = []
         # attns = []
         norm_out=[]
         abnorm_out=[]
-        test_labels=self.make_labels('MSL',self.id, self.datapath)
-        for i, (Xi, Xv) in enumerate(self.test_loader):
+        for i, (Xi, Xv) in tqdm(enumerate(self.test_loader), total=len(self.test_loader), desc="Testing"):
             Xi, Xv = Xi.to(self.device), Xv.to(self.device)
             self.optimizer.zero_grad()
             out = self.model(Xi, Xv)
-            base=Xi.squeeze(-1)
-            loss = self.loss(out, base)
-            norm_out.append(loss.detach().cpu().numpy())
+            base = Xi.squeeze(-1)
+            for j in range(out.size(0)):
+                norm_out.append(self.evaluation(out[j], base[j]).detach().cpu().numpy())
+   
             # abnorm_out.append(out[:,1].detach().cpu().numpy())
-        norm_out=np.concatenate(norm_out, axis=0)
+        norm_out=np.array(norm_out)
         # abnorm_out=np.concatenate(abnorm_out, axis=0)
         # attns=np.concatenate(attns, axis=0)
         # print(attns.shape)
         
         ma, mp, mr, mf=0.0,0.0,0.0,0.0
         nums = 0.0
-        while nums < self.anormly_ratio:
+        while nums < self.config.anormly_ratio:
             nums += 0.1
             norm_thresh = np.percentile(norm_out,nums)
-            abnorm_thresh = np.percentile(abnorm_out,nums)
-            normp = (norm_out < norm_thresh).astype(int)
-            abnormp=(norm_out > abnorm_thresh).astype(int)
-            pred = np.bitwise_and(normp, abnormp)
+            # abnorm_thresh = np.percentile(abnorm_out,nums)
+            normp = (norm_out > norm_thresh).astype(int)
+            # abnormp=(norm_out > abnorm_thresh).astype(int)
+            pred = normp
             if 1 not in pred:
                 pred=normp
-            preds=[0 for i in range(len(test_labels))]
+            preds=[0 for i in range(len(self.test_labels))]
             for index,value in enumerate(pred):
                 if value==1:
                     # if pred[index+1]==1:
-                    for i in range(self.win_size//2):
-                        preds[index*self.step+i]=1
+                    for i in range(self.seq_length):
+                        preds[index*self.step_size+i]=1
             # print(len(preds))
-            gt = test_labels.astype(int)
+            gt = self.test_labels.astype(int)
             if self.pa:
                 self.pa_stratge(gt,preds)
             accuracy, precision, recall, f_score=self.compute_f1(gt,preds)
@@ -203,8 +208,8 @@ if __name__ == "__main__":
         
     parser = argparse.ArgumentParser(description='Anomaly Detection')
     parser.add_argument('--datapath', type=str, default='./MSL&SMAP/data', help='data path')
-    parser.add_argument('--batch_size', type=int, default=3, help='batch size')
-    parser.add_argument('--seq_length', type=int, default=50, help='sequence length')
+    parser.add_argument('--batch_size', type=int, default=32, help='batch size')
+    parser.add_argument('--seq_length', type=int, default=25, help='sequence length')
     parser.add_argument('--step_size', type=int, default=1, help='step size')
     parser.add_argument('--continous_features', type=list, default=continous_features, help='continous features')
     parser.add_argument('--categorial_features', type=list, default=categorial_features, help='categorial features')
@@ -221,11 +226,13 @@ if __name__ == "__main__":
     
     parser.add_argument('--epochs', type=int, default=10, help='number of epochs')
     parser.add_argument('--dataset', type=str, default='MSL', help='dataset name')
+    parser.add_argument('--labelpath', type=str, default='MSL&SMAP', help='label path')
     parser.add_argument('--model_save_path', type=str, default='./checkpoints', help='model save path')
-    # parser.add_argument('--id', type=str, default=id, help='id')
+    parser.add_argument('--anormly_ratio', type=float, default=50.0, help='anormly ratio')
+    parser.add_argument('--pa', type=bool, default=False, help='pa strategy')
     
     args = parser.parse_args()
     
     exp=EXP_AD(args.datapath,id,args)
-    exp.train()
+    # exp.train()
     exp.test()
